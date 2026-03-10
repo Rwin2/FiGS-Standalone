@@ -440,6 +440,7 @@ def generate_gsplat(scene_file_name: str,
             _print_stage("Computing Transforms", "COMPLETED", transform_elapsed)
 
         if embedding_config == "semantic":
+            print("Running semantic gsplat generation with RANSAC alignment")
             # sfm_to_world_T = np.eye(4)
             # sfm_to_world_T[:3,:3],sfm_to_world_T[:3,3] = cs*Rs,ts
 
@@ -503,6 +504,7 @@ def generate_gsplat(scene_file_name: str,
             command = [
                 "ns-train",
                 "gemsplat",
+                #"splatfacto",
                 "--data", scene_file_name,
                 "--viewer.quit-on-train-completion", "True",
                 "--output-dir", 'outputs',
@@ -588,7 +590,7 @@ def generate_gsplat(scene_file_name: str,
             command = [
                 "ns-train",
                 "splatfacto",
-                # "gemsplat",
+                 #"gemsplat",
                 "--data", scene_file_name,
                 "--viewer.quit-on-train-completion", "True",
                 "--output-dir", 'outputs',

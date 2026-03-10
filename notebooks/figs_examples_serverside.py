@@ -8,8 +8,14 @@ from figs.simulator import Simulator
 from figs.control.vehicle_rate_mpc import VehicleRateMPC
 
 import os
-os.environ["ACADOS_SOURCE_DIR"] = "/data/<username>/FiGS-Standalone/acados"
-os.environ["LD_LIBRARY_PATH"] = os.getenv("LD_LIBRARY_PATH", "") + "/data/<username>/FiGS-Standalone/acados/lib"
+os.environ["ACADOS_SOURCE_DIR"] = "/data/erwinpi/FiGS-Standalone/acados"
+os.environ["LD_LIBRARY_PATH"] = os.getenv("LD_LIBRARY_PATH", "") + "/data/erwinpi/FiGS-Standalone/acados/lib"
+
+from pathlib import Path
+
+CONFIGS = Path("/home/erwinpi/data/FiGS-Standalone/configs")
+
+
 
 import numpy as np
 
@@ -26,8 +32,8 @@ ctypes.CDLL("/data/<username>/FiGS-Standalone/acados/lib/libacados.so")
 # FiGS Capture Examples (scene_name, capture_name)
 capture_examples = [
     # 'backroom'
-    # 'sv_1007_gemsplat'
-    'packardpark'
+     'sv_1007_gemsplat'
+    #'packardpark'
 ]
 
 # FiGS Simulate Examples (scene_name, rollout_name, frame_name, policy_name, course_name)
@@ -35,9 +41,10 @@ simulate_examples = [
     # ('flightroom', 'baseline', 'carl', 'vrmpc_fr', 'extended_traj_track'),
     # ('backroom',   'baseline', 'carl', 'vrmpc_fr', 'cluttered_env_track'),
     # ('mid_gate',   'baseline', 'carl', 'vrmpc_fr', 'robustness_track'),
-    ('packardpark',   'baseline', 'carl', 'vrmpc_rrt', 'track_spiral')
-    # ('sv_917_3_left_gemsplat', 'baseline', 'carl', 'vrmpc_rrt', 'inward_spiral'),
+    #('packardpark',   'baseline', 'carl', 'vrmpc_rrt', 'track_spiral')
+     #('sv_917_3_left_gemsplat', 'baseline', 'carl', 'vrmpc_rrt', 'inward_spiral'),
     # ('sv_1007_gemsplat', 'baseline', 'carl', 'vrmpc_fr', 'robustness_track'),
+     ('flightroom_ssv_exp', 'baseline', 'carl', 'vrmpc_fr', 'track_spiral'),
 ]
 
 # query = 'ladder'
@@ -51,8 +58,8 @@ for scene, rollout, frame, policy, course in simulate_examples:
     print("-------------------------------------------------------------")
 
     # Load the policy and simulator
-    sim = Simulator(scene,rollout,frame)
-    ctl = VehicleRateMPC(course,policy,frame)
+    sim = Simulator(scene,rollout,frame,configs_path=CONFIGS)
+    ctl = VehicleRateMPC(course,policy,frame,configs_path=CONFIGS)
 
     # Use the ideal trajectory in VehicleRateMPC to get initial conditions and final time
     t0,tf,x0 = ctl.tXUd[0,0],ctl.tXUd[0,-1],ctl.tXUd[1:11,0]

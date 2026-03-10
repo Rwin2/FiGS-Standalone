@@ -588,7 +588,14 @@ def generate_rrt_paths(
 
         if not config.get('gif') and viz:
             print("Rendering the figure...")
-            fig.show()
+            #fig.show()
+            out_dir = "/home/erwinpi/FiGS-Standalone/3dgs/workspace/outputs"
+            os.makedirs(out_dir, exist_ok=True)
+            html_path = os.path.join(out_dir, f"rrt_{target}.html")
+
+            fig.write_html(html_path, auto_open=False)
+            print(f"Saved figure to {html_path}")
+
 
         if config.get('gif'):
             # --- 4) Render & save each frame ---
@@ -981,7 +988,14 @@ def visualize_rrt_trajectories(trajset,
 
         if not config.get('gif'):
             print("Rendering the figure...")
-            fig.show()
+            #fig.show()
+            out_dir = "/home/erwinpi/FiGS-Standalone/3dgs/workspace/outputs"
+            os.makedirs(out_dir, exist_ok=True)
+            html_path = os.path.join(out_dir, f"rrt_{target}.html")
+
+            fig.write_html(html_path, auto_open=False)
+            print(f"Saved figure to {html_path}")
+
 
         if config.get('gif'):
             # --- 4) Render & save each frame ---

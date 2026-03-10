@@ -35,11 +35,25 @@ class GSplat():
         # Do some acrobatics to find necessary config files
         self.config_path = scene_config['path']
         self.name = scene_config['name']
+        current_path = self.config_path
+        print(f"Current path dict: {current_path}")
+        print(f"Current path name: {current_path.name}")
         
-        # Get workspace root from this file's location: render -> figs -> src -> repo root
-        workspace_root = Path(__file__).resolve().parents[3]
+        # Search upward for 'src' directory, then go up one level to get workspace root
+        # workspace_root = None
+        # while current_path.parent != current_path:  # Stop when reaching the filesystem root
+        #     if current_path.name == "src":
+        #         workspace_root = current_path.parent  # Go up one level from 'src'
+        #         break
+        #     current_path = current_path.parent  # Move up one level
         
-        # Safety check 
+        # if workspace_root is None:
+        #     raise FileNotFoundError(f"Could not find 'src' directory in parent directories of {self.config_path}")
+        # Find FiGS-Standalone repo root (the folder that contains 'src/')
+        # NOTE: don't infer from config.yml path; infer from this python file's location.
+        workspace_root = Path(__file__).resolve().parents[3]  # render -> figs -> src -> repo root
+
+        # Safety check (optional but useful)
         if not (workspace_root / "src").is_dir():
             raise FileNotFoundError(
                 f"Repo root detection failed: {workspace_root} (no 'src' directory found)"
