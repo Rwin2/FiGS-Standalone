@@ -284,7 +284,7 @@ class Simulator:
                 Tb2w = th.xv_to_T(xcr)
                 T_c2w = Tb2w@T_c2b
 
-                extra_ch = self.gsplat.extra_channels
+                extra_ch = getattr(self.gsplat, "extra_channels", [])
 
                 if vision_processor is not None and perception == "semantic_depth" and perception_type == "clipseg" and query is not None:
                     image_dict = self.gsplat.render_rgb(camera,T_c2w, extra_channels=extra_ch)

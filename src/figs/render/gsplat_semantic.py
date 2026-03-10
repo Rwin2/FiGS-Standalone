@@ -97,6 +97,7 @@ class GSplat():
             perception_mode = yaml.safe_load(file)
             self.visual_mode = perception_mode.get("visual_mode")
             self.perception_mode = perception_mode.get("perception_mode")
+            self.extra_channels = perception_mode.get("extra_channels", [])
 
         if self.visual_mode not in ["rgb","dynamic","semantic_depth"]:
             raise ValueError(f"Invalid visual mode: {self.visual_mode}")
@@ -159,7 +160,8 @@ class GSplat():
         self,
         camera: Cameras,
         T_c2w: np.ndarray,
-        query: Optional[str] = None
+        query: Optional[str] = None,
+        extra_channels: Optional[list] = None
     ) -> Union[np.ndarray, Dict[str, np.ndarray]]:
         """
         Render an RGB (and optionally semantic) image from the GSplat pipeline.

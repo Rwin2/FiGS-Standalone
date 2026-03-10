@@ -177,104 +177,6 @@ def generate_spin_keyframes(
 
     return {"name": name, "Nco": Nco, "keyframes": keyframes}
 
-# def generate_spin_keyframes(
-#     name: str,
-#     Nco: int,
-#     xyz: np.ndarray,
-#     theta0: float,
-#     theta1: float,
-#     time: float,
-# ) -> dict:
-#     """
-#     Auto-generate a JSON-style dict of keyframes that:
-#       • stays at position xyz,
-#       • rotates from theta0 → theta1 via the shortest path,
-#       • then continues a full 360° in the same direction back to theta1.
-
-#     Args:
-#       name   – trajectory name (e.g. "scan_spin")
-#       Nco    – number of polynomial coefficients
-#       xyz    – length-3 array [x,y,z] constant through the scan
-#       theta0 – start angle in radians
-#       theta1 – target angle in radians
-#       t1     – time at which we reach theta1
-#       t2     – time at which we finish full 360° back to theta1
-
-#     Returns:
-#       A dict exactly in your expected format.
-
-#     Example Usage:
-#      traj = generate_spin_keyframes(
-#          name="scan_spin",
-#          Nco=6,
-#          xyz=np.array([1.0, 2.0, 0.5]),
-#          theta0=   np.deg2rad(  30),
-#          theta1=   np.deg2rad( 150),
-#          t1=5.0,
-#          t2=15.0
-#      )
-#     """
-#     # 1) shortest signed delta θ in (−π,π]
-#     dθ = ((theta1 - theta0 + np.pi) % (2*np.pi)) - np.pi
-#     direction = np.sign(dθ) if dθ != 0 else 1.0
-#     abs_dθ = abs(dθ)
-
-#     θ_mid_1 = theta0 + dθ
-#     θ_mid_2 = θ_mid_1 + direction * np.pi  # 180° from θ_mid_1
-#     θ_end = θ_mid_1 + direction * 2*np.pi
-
-#     # 2) set the times between the keyframes
-#     total_ang = abs_dθ + 2*np.pi
-#     t1 = (abs_dθ / total_ang) * time
-#     t2 = ((abs_dθ + np.pi) / total_ang) * time
-#     t3 = time
-
-#     ω = total_ang / time
-#     ω_signed = ω * direction        # include sign of rotation
-#     # helper: build the 4×3 "fo" array
-#     def make_fo(
-#         x_val: float,
-#         y_val: float,
-#         z_val: float,
-#         θ_val: float,
-#         is_intermediate: bool,
-#         ω_signed: float
-#     ):
-#         """
-#         Build 4×3 fo.  
-#         • x,y,z rows: unchanged (None or 0.0)  
-#         • θ row:  ω_signed only on intermediate knots, zero at start/end.
-#         """
-#         fo = []
-#         for idx, val in enumerate((x_val, y_val, z_val, θ_val)):
-#             if idx < 3:
-#                 # x,y,z as before
-#                 if is_intermediate:
-#                     fo.append([val, None, None])
-#                 else:
-#                     fo.append([val, 0.0, 0.0])
-#             else:
-#                 # θ-row: velocity = ω_signed only if intermediate
-#                 if is_intermediate:
-#                     # fix velocity to ω, but leave acceleration free so it can ramp
-#                     fo.append([val, ω_signed, None])
-#                 else:
-#                     # endpoints start/end at rest
-#                     fo.append([val, 0.0,       0.0])
-#         return fo
-
-#     return {
-#         "name": name,
-#         "Nco":  Nco,
-#         "keyframes": {
-#             "fo0": { "t": 0.0,          "fo": make_fo(*xyz, theta0, False, ω_signed) },
-#             "fo1": { "t": t1,           "fo": make_fo(*xyz, θ_mid_1,    True,  ω_signed) },
-#             "fo2": { "t": t2,           "fo": make_fo(*xyz, θ_mid_2,    True,  ω_signed) },
-#             "fo3": { "t": time,   "fo": make_fo(*xyz, θ_end,    False, ω_signed) },
-#         }
-#     }
-
-
 def filter_branches(paths, top_k=1, hover_mode=False, verbose=False):
     """
     Filters branches by hover-mode + adjacency, computes furthest reach, then
@@ -546,7 +448,7 @@ def process_RRT_objectives(
         ]).T
 
         # Find free points (no obstacle within r2)
-        kdtree = cKDTree(epcds_arr.T)
+        kdtree = cKDTree(epcds_arr.T if epcds_arr.shape[0] == 3 and epcds_arr.shape[1] != 3 else epcds_arr)
         free_pts = [
             p for p in circle_pts
             if not kdtree.query_ball_point(p, r2, eps=0.05, workers=-1)
@@ -642,7 +544,7 @@ def process_RRT_objectives_loiter(
     sampled_obj_targets = []
 
     # build once
-    kdtree = cKDTree(epcds_arr.T)
+    kdtree = cKDTree(epcds_arr.T if epcds_arr.shape[0] == 3 and epcds_arr.shape[1] != 3 else epcds_arr)
     minb, maxb = env_bounds["minbound"], env_bounds["maxbound"]
 
     for i, obj in enumerate(obj_targets):
@@ -690,86 +592,52 @@ def process_RRT_objectives_loiter(
 
     return sampled_obj_targets, object_centroids
 
-def process_obstacle_clusters_and_sample(
-    epcds_arr,          # 3×M array of obstacle points
-    env_bounds,         # {"minbound": (x,y,z), "maxbound": (x,y,z)}
-    z_range=(-2.5, -0.9), # only cluster points with z in [0.9, 2.0]
-    cluster_eps=0.5,    # DBSCAN ε (meters) for clustering obstacles
-    min_samples=10,     # DBSCAN min pts per cluster
-    clearance=0.2,      # extra clearance (m) beyond cluster extent
-    sample_size=10      # how many points on the circle
-):
-    """
-    1) Filter obstacle points inside env_bounds
-    2) Cluster them with DBSCAN → labels
-    3) For each cluster:
-        - compute centroid and its max‐radius
-        - set R = max_radius + clearance
-        - sample `sample_size` points equally around centroid at R
-        - reject any that collide or leave env_bounds
-    Returns:
-      cluster_centroids: list of (3,) arrays
-      sampled_rings:     list of (≤sample_size, 3) arrays
-    """
-    pts = epcds_arr.T
-    minb, maxb = np.array(env_bounds["minbound"]), np.array(env_bounds["maxbound"])
-    min_h, max_h = z_range
+def process_obstacle_clusters_and_sample(epcds_arr, env_bounds, z_range=None, cluster_eps=0.3, min_samples=10, clearance=0.3, sample_size=5):
+    # Force (N, 3)
+    pts  = epcds_arr.T if epcds_arr.shape[0] == 3 and epcds_arr.shape[1] != 3 else epcds_arr
+    minb = np.array(env_bounds["minbound"])
+    maxb = np.array(env_bounds["maxbound"])
+    min_h, max_h = z_range if z_range is not None else (float(minb[2]), float(maxb[2]))
 
-    # 1) only keep obstacles inside the bounds
-    mask = np.all((pts >= minb) & (pts <= maxb), axis=1)
+    # 1) only keep points inside the bounds
+    mask  = np.all((pts >= minb) & (pts <= maxb), axis=1)
     in_pts = pts[mask]
     if len(in_pts) == 0:
+        print("[process_obstacle_clusters_and_sample] No points inside env bounds.")
         return [], []
 
-    # 2) cluster
-    clustering = DBSCAN(eps=cluster_eps, min_samples=min_samples).fit(in_pts)
-    labels = clustering.labels_
-    clusters = {lab: in_pts[labels==lab] for lab in set(labels) if lab >= 0}
+    # 2) filter by z_range
+    z_mask = (in_pts[:, 2] >= min_h) & (in_pts[:, 2] <= max_h)
+    in_pts  = in_pts[z_mask]
+    if len(in_pts) == 0:
+        print("[process_obstacle_clusters_and_sample] No points in z_range.")
+        return [], []
 
-    kdtree = cKDTree(pts)  # full scene for collision checks
-    centroids, rings = [], []
+    # 3) DBSCAN clustering
+    from sklearn.cluster import DBSCAN
+    labels       = DBSCAN(eps=cluster_eps, min_samples=min_samples).fit_predict(in_pts)
+    unique_labels = set(labels) - {-1}
+    if not unique_labels:
+        print("[process_obstacle_clusters_and_sample] No clusters found.")
+        return [], []
 
-    for lab, pts_c in clusters.items():
-        # 3a) centroid & cluster‐radius
-        ctr = pts_c.mean(axis=0)
+    rings     = []
+    obstacles = []
+    for lbl in unique_labels:
+        cluster  = in_pts[labels == lbl]
+        centroid = cluster.mean(axis=0)
+        obstacles.append(centroid)
+        radius   = np.max(np.linalg.norm(cluster - centroid, axis=1)) + clearance
+        theta    = np.linspace(0, 2 * np.pi, max(8, sample_size), endpoint=False)
+        ring_pts = np.column_stack([
+            centroid[0] + radius * np.cos(theta),
+            centroid[1] + radius * np.sin(theta),
+            np.full(len(theta), centroid[2])
+        ])
+        rings.append(ring_pts)
 
-        # height‐filter
-        if not (min_h <= ctr[2] <= max_h):
-            continue
-
-        radii = np.linalg.norm(pts_c - ctr, axis=1)
-        R_cluster = radii.max()
-        R = R_cluster + clearance
-
-        # 3b) generate equal‐angle candidates
-        thetas = np.linspace(0, 2*np.pi, sample_size, endpoint=False)
-        circle = np.vstack([
-            ctr[0] + R*np.cos(thetas),
-            ctr[1] + R*np.sin(thetas),
-            np.full_like(thetas, ctr[2])
-        ]).T
-
-        # 3c) reject any too-close to obstacle (within clearance) or OOB
-        good = []
-        for p in circle:
-            if kdtree.query_ball_point(p, clearance, eps=0.01):
-                continue
-            if not np.all((minb <= p) & (p <= maxb)):
-                continue
-            good.append(p)
-
-        if np.array(good).size == 0:
-            continue
-        
-        # append centroid
-        centroids.append(ctr)
-        # append forward ring
-        rings.append(np.array(good))
-        # append reversed ring
-        centroids.append(ctr)
-        rings.append(np.array(good[::-1]))
-
-    return rings, centroids
+    print(f"[process_obstacle_clusters_and_sample] {len(obstacles)} clusters found.")
+    return rings, obstacles
 
 def debug_figures_RRT(obj_loc, initial, original, smoothed, time_points):
     def extract_yaw_from_quaternion(quaternions):
@@ -965,7 +833,7 @@ def process_branch(branch_id, positions, dt, constant_velocity, obj_loc, pad_t, 
         s2 = sin_theta / sin_theta_0
 
         return s1 * q1 + s2 * q2
-
+    
     def weight_quaternions(quaternions: np.ndarray, q_target: np.ndarray, progress: np.ndarray) -> np.ndarray:
         """
         Weight quaternions along the trajectory towards the target quaternion.
@@ -1369,7 +1237,7 @@ def traj_orient(
 
     Special handling:
       • If camera_x,y == goal_x,y (i.e. dist_xy < eps), we keep the previous yaw (no jump).
-      • We “unwrap” yaw around ±π so there is no discontinuous 360° flip.
+      • We “unwrap” yaw around ±π so yaw moves smoothly
 
     Returns:
       new_quaternions: np.ndarray of shape (N,4), dtype=float.

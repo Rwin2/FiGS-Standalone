@@ -144,7 +144,7 @@ def rescale_point_cloud(nerf,viz=False,cull=False,verbose=False,save_html=None):
 
     epcds_bounds = {"minbound": minbound, "maxbound": maxbound}
 
-    return epcds, env_pcd_scaled.T, epcds_bounds, env_pcd, env_pcd_mask, env_attr
+    return epcds, env_pcd_scaled, epcds_bounds, env_pcd, env_pcd_mask, env_attr
 
 def get_points(path: Path, positives: str, negatives: str, threshold: float, filter_radius: float, enable_visualization_pcd=False):
 
@@ -251,17 +251,15 @@ def get_points(path: Path, positives: str, negatives: str, threshold: float, fil
     similarity_mask = (sc_sim > threshold_mask).squeeze().reshape(-1,).cpu().numpy()
 
     # masked point cloud
-    masked_pcd_pts = np.asarray(gem_pcd.points)[similarity_mask, ...]
-    masked_pcd_color = np.asarray(gem_pcd.colors)[similarity_mask, ...]
+    pcd = o3d.geometry.PointCloud()
 
     # # #
     # # # Visualizing  a Semantic-Conditioned Point Cloud
     # # # 
 
     # semantic-conditioned point cloud
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(masked_pcd_pts)
-    pcd.colors = o3d.utility.Vector3dVector(masked_pcd_color)
+    pcd.points = o3d.utility.Vector3dVector(np.asarray(gem_pcd.points)[similarity_mask, ...])
+    pcd.colors = o3d.utility.Vector3dVector(np.asarray(gem_pcd.colors)[similarity_mask, ...])
 
     if enable_visualization_pcd:
         # visualize point cloud
@@ -482,17 +480,27 @@ def get_centroid(nerf: NeRF,
     similarity_mask_out[similarity_mask == True] = similarity_mask_subset
     
     if enable_spherical_filter:
-        # apply a spherical filter
-        rel_inds = spherical_filter(source_points=np.concatenate((scene_pcd_pts,
-                                                                  scene_pcd_colors,
-                                                                  sc_sim.cpu().numpy()),
-                                                                  axis=-1),
-                                    target_points=np.concatenate((scene_pcd_pts[similarity_mask_out],
-                                                                  scene_pcd_colors[similarity_mask_out],
-                                                                  sc_sim.cpu().numpy()[similarity_mask_out]),
-                                                                  axis=-1),
-                                    radius=filter_radius,
-                                    use_Mahalanobis_distance=use_Mahalanobis_distance)
+        # ── Guard : aucun point sémantique trouvé ──────────────
+        if similarity_mask_out.sum() == 0:
+            print(f"[get_centroid] ⚠️  No points match '{positives}' "
+                  f"(threshold={threshold:.3f}). "
+                  f"Try lowering similarity threshold in scene yml.")
+
+            empty_pcd = o3d.geometry.PointCloud()
+            return np.zeros(3), np.array([0.0, 1.0]), empty_pcd, \
+                   np.zeros(len(scene_pcd_pts), dtype=bool), {}
+
+        rel_inds = spherical_filter(   # ...existing code...
+            source_points=np.concatenate((scene_pcd_pts,
+                                          scene_pcd_colors,
+                                          sc_sim.cpu().numpy()),
+                                          axis=-1),
+            target_points=np.concatenate((scene_pcd_pts[similarity_mask_out],
+                                          scene_pcd_colors[similarity_mask_out],
+                                          sc_sim.cpu().numpy()[similarity_mask_out]),
+                                          axis=-1),
+            radius=filter_radius,
+            use_Mahalanobis_distance=use_Mahalanobis_distance)
         rel_inds = np.array(list(rel_inds)).astype(int)
         
         # update the mask

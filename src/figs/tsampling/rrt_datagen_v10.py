@@ -21,7 +21,7 @@ class RRT:
         self.env_arr = env_arr
         # print(f"Environment Points: {self.env_arr.shape}")
         if self.env_pts is not None:
-            self.obstacle_kdtree = cKDTree(self.env_arr.T)
+            self.obstacle_kdtree = cKDTree(self.env_arr.T if self.env_arr.shape[0] == 3 and self.env_arr.shape[1] != 3 else self.env_arr)
         else:
             self.obstacle_kdtree = None
         self.algorithm = algorithm
