@@ -184,19 +184,22 @@ class Simulator:
         
         # Some useful intermediate variables
         drn_spec = generate_specifications(frame_config)
-        sim_json = 'figs_sim_solver.json'
+        # Use PID-unique names so parallel processes don't conflict on the same files
+        sim_json     = f'figs_sim_solver_{os.getpid()}.json'
+        sim_code_dir = f'c_generated_sim_{os.getpid()}'
 
         # Generate the simulator
         sim = AcadosSim()
-        sim.model = export_quadcopter_ode_model(drn_spec["m"],drn_spec["tn"])  
+        sim.code_export_directory = sim_code_dir
+        sim.model = export_quadcopter_ode_model(drn_spec["m"],drn_spec["tn"])
         sim.solver_options.T = 1/self.conFiG["rollout"]["frequency"]
         sim.solver_options.integrator_type = 'IRK'
 
         solver = AcadosSimSolver(sim, json_file=sim_json, verbose=False)
 
-        # Clean up the ACADOS generation files
+        # Clean up the ACADOS generation files (PID-unique paths avoid race conditions)
         os.remove(os.path.join(os.getcwd(),sim_json))
-        shutil.rmtree(sim.code_export_directory)
+        shutil.rmtree(sim_code_dir)
         
         # Update attribute(s)
         self.solver = solver

@@ -96,7 +96,9 @@ class VehicleRateMPC(BaseController):
         nx,nu = drn_spec["nx"], drn_spec["nu"]
 
         ny,ny_e = nx+nu,nx
-        solver_json = 'figs_ocp_solver.json'
+        # Use PID-unique names so parallel processes don't conflict on the same files
+        solver_json = f'figs_ocp_solver_{os.getpid()}.json'
+        ocp_code_dir = f'c_generated_ocp_{os.getpid()}'
         
         # =====================================================================
         # Compute Desired Trajectory
@@ -124,6 +126,7 @@ class VehicleRateMPC(BaseController):
 
         # Initialize Acados OCP
         ocp = AcadosOcp()
+        ocp.code_export_directory = ocp_code_dir
 
         ocp.model = export_quadcopter_ode_model(drn_spec["m"],drn_spec["tn"])        
         ocp.model.cost_y_expr = vertcat(ocp.model.x, ocp.model.u)
@@ -159,10 +162,10 @@ class VehicleRateMPC(BaseController):
         ocp.solver_options.qp_solver_warm_start = 1
 
         solver = AcadosOcpSolver(ocp,json_file=solver_json,verbose=False)
-        
-        # Clear the generated code
+
+        # Clear the generated code (PID-unique paths avoid race conditions)
         os.remove(os.path.join(os.getcwd(),solver_json))
-        shutil.rmtree(ocp.code_export_directory)
+        shutil.rmtree(ocp_code_dir)
 
         # =====================================================================
         # Controller Variables
