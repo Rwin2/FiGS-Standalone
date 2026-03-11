@@ -100,6 +100,7 @@ class Simulator:
             print(f"rendering simulation with {perception_type}.")
         else:
             self.conFiG["perception"] = "rgb"
+            self.conFiG["perception_type"] = None
 
     def load_scene(self, scene_name:str):
         """
