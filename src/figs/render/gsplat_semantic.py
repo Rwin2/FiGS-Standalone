@@ -210,7 +210,7 @@ class GSplat():
             self.pipeline.model.viewer_utils.handle_language_queries(
                 raw_text="",
                 is_positive=False)
-            
+
             obb_box = None
 
             with torch.no_grad():
@@ -225,11 +225,12 @@ class GSplat():
                         cameras,
                         obb_box=None
                     )
-
-        outputs = self.pipeline.model.get_outputs_for_camera(
-            cameras,
-            obb_box=None
-        )
+        else:
+            outputs = self.pipeline.model.get_outputs_for_camera(
+                cameras,
+                obb_box=None,
+                compute_semantics=False
+            )
 
         image_d = outputs.get("depth", None)
         # Convert normalized depth to true metric depth
