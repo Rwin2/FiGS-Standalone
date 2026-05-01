@@ -413,7 +413,7 @@ class Simulator:
         shutil.rmtree(sim_code_dir)
         return solver
 
-    def simulate_parallel(self, configs, verbose=False):
+    def simulate_parallel(self, configs, verbose=False, store_images=True):
         """
         Run N simulations in parallel sharing one Gaussian Splat.
 
@@ -577,14 +577,15 @@ class Simulator:
                 k = i // s.n_sim2ctl
                 img = s._img
 
-                if query is not None:
-                    img["semantic"] = s.icr
-                for ch_name, ch_img in img.items():
-                    if ch_name == "depth_raw":
-                        continue
-                    if ch_name not in s.Iro_lists:
-                        s.Iro_lists[ch_name] = []
-                    s.Iro_lists[ch_name].append(ch_img)
+                if store_images:
+                    if query is not None:
+                        img["semantic"] = s.icr
+                    for ch_name, ch_img in img.items():
+                        if ch_name == "depth_raw":
+                            continue
+                        if ch_name not in s.Iro_lists:
+                            s.Iro_lists[ch_name] = []
+                        s.Iro_lists[ch_name].append(ch_img)
 
                 s.Tro[k] = s._tcr
                 s.Xro[:, k + 1] = s.xcr
@@ -600,14 +601,18 @@ class Simulator:
                     s.Uro = s.Uro[:, :n_done]
                     s.Tsol = s.Tsol[:, :n_done]
                     s.Adv = s.Adv[:, :n_done]
-                    s.Iro = {nm: np.stack(fr) for nm, fr in s.Iro_lists.items()}
+                    s.Iro = {nm: np.stack(fr) for nm, fr in s.Iro_lists.items()} if store_images else {}
                     s.done = True
+
+            if verbose and active_ctl and i % (max(1, max_Nsim // 20)) == 0:
+                n_done = sum(1 for s in states if s.done)
+                print(f"    step {i}/{max_Nsim}  active={len(active_ctl)}  done={n_done}/{N}", flush=True)
 
         # --- Finalize outputs ---
         results = []
         for s in states:
             if not s.done:
-                s.Iro = {nm: np.stack(fr) for nm, fr in s.Iro_lists.items()}
+                s.Iro = {nm: np.stack(fr) for nm, fr in s.Iro_lists.items()} if store_images else {}
                 s.Tro[s.Nctl] = s.t0 + s.Nsim / hz_sim
             results.append((s.Tro, s.Xro, s.Uro, s.Iro, s.Tsol, s.Adv))
 
