@@ -212,6 +212,7 @@ class Simulator:
                  validation:bool=False,
                  verbose:bool=False,
                  early_stop_fn=None,
+                 gt_target_3d=None,
                  ) -> Tuple[np.ndarray,np.ndarray,np.ndarray,np.ndarray,np.ndarray,np.ndarray]:
         """
         Simulates the flight.
@@ -275,6 +276,13 @@ class Simulator:
         # Instantiate camera object
         camera = self.gsplat.generate_output_camera(cam_cfg)
 
+        # GT depth extraction: per-step rendered depth at the GT target pixel
+        depth_at_gt_list = [] if gt_target_3d is not None else None
+        if gt_target_3d is not None:
+            gt_target_3d = np.squeeze(gt_target_3d)
+            fx, fy = cam_cfg["fx"], cam_cfg["fy"]
+            cx, cy = cam_cfg["cx"], cam_cfg["cy"]
+
         if verbose:
             times = []
 
@@ -311,6 +319,27 @@ class Simulator:
                 else:
                     image_dict = self.gsplat.render_rgb(camera,T_c2w, extra_channels=extra_ch)
                     icr = image_dict["rgb"]
+
+                # Extract rendered depth at GT target pixel (for occlusion gating)
+                if gt_target_3d is not None:
+                    depth_raw = image_dict.get("depth_raw")
+                    if depth_raw is not None:
+                        T_w2c = np.linalg.inv(T_c2w)
+                        pt = T_w2c @ np.array([*gt_target_3d, 1.0])
+                        if pt[2] < -0.01:  # in front of camera
+                            obj_depth = -pt[2]
+                            u = fx * pt[0] / obj_depth + cx
+                            v = fy * (-pt[1]) / obj_depth + cy  # OpenGL Y-up to pixel Y-down
+                            dh, dw = depth_raw.shape[:2]
+                            ui, vi = int(round(u)), int(round(v))
+                            if 0 <= ui < dw and 0 <= vi < dh:
+                                depth_at_gt_list.append(float(depth_raw[vi, ui]))
+                            else:
+                                depth_at_gt_list.append(np.nan)  # out of frame
+                        else:
+                            depth_at_gt_list.append(np.nan)  # behind camera
+                    else:
+                        depth_at_gt_list.append(np.nan)  # no depth_raw available
 
                 # Add sensor noise and syncronize estimated state
                 if use_fusion:
@@ -354,7 +383,7 @@ class Simulator:
 
                 for ch_name, ch_img in image_dict.items():
                     if ch_name == "depth_raw":
-                        continue  # skip raw float arrays
+                        continue  # skip raw float arrays (large, causes OOM)
                     if ch_name not in Iro_lists:
                         Iro_lists[ch_name] = []
                     Iro_lists[ch_name].append(ch_img)
@@ -376,6 +405,8 @@ class Simulator:
                     Tsol = Tsol[:, :n_done]
                     Adv = Adv[:, :n_done]
                     Iro = {name: np.stack(frames) for name, frames in Iro_lists.items()}
+                    if depth_at_gt_list is not None:
+                        Iro["depth_at_gt"] = np.array(depth_at_gt_list[:n_done])
                     return Tro, Xro, Uro, Iro, Tsol, Adv
 
         if verbose:
@@ -388,6 +419,8 @@ class Simulator:
 
         # Stack collected frames into arrays
         Iro = {name: np.stack(frames) for name, frames in Iro_lists.items()}
+        if depth_at_gt_list is not None:
+            Iro["depth_at_gt"] = np.array(depth_at_gt_list)
 
         # Log final time
         Tro[Nctl] = t0+Nsim/hz_sim
